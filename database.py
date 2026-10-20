@@ -139,3 +139,11 @@ def obtener_ultimos_7_dias(habito_id):
             "cumplido": fecha_dia in fechas
         })
     return dias
+def obtener_habito(habito_id):
+    conn = get_connection()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("SELECT * FROM habitos WHERE id = %s", (habito_id,))
+    habito = cur.fetchone()
+    cur.close()
+    conn.close()
+    return habito

@@ -1,3 +1,4 @@
+from services.ai_service import generar_mensaje_motivacional
 from flask import Flask, render_template, request, redirect, url_for, jsonify
 import random
 import database as db
@@ -67,5 +68,17 @@ def eliminar_habito(habito_id):
     return redirect(url_for("index"))
 
 
+@app.route("/habitos/<int:habito_id>/mensaje", methods=["POST"])
+def generar_mensaje(habito_id):
+    habito = db.obtener_habito(habito_id)
+    if not habito:
+        return "Hábito no encontrado", 404
+
+    resumen = {
+        "nombre": habito["nombre"],
+        "racha": db.calcular_racha(habito_id),
+        "cumplido_hoy": db.obtener_ultimos_7_dias(habito_id)[-1]["cumplido"],
+    }
+    return generar_mensaje_motivacional(resumen)
 if __name__ == "__main__":
     app.run(debug=True)

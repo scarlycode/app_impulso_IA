@@ -1,58 +1,147 @@
-{% extends "base.html" %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Impulso · Mis hábitos</title>
 
-{% block content %}
+  <!-- HTMX: necesario para el botón de IA -->
+  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
 
-<section class="hero">
-    <p class="hero-mensaje">{{ mensaje }}</p>
-    <a href="{{ url_for('nuevo_habito') }}" class="btn-primary">+ Nuevo hábito</a>
-</section>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      background: #f4f5f9;
+      color: #1f2433;
+      margin: 0;
+      padding: 24px 16px 48px;
+    }
+    .contenedor { max-width: 720px; margin: 0 auto; }
+    h1 { margin: 0 0 4px; }
+    .mensaje-dia {
+      background: #fff3e0;
+      border-left: 4px solid #ff9800;
+      padding: 12px 16px;
+      border-radius: 8px;
+      margin: 16px 0 24px;
+    }
+    .barra { display: flex; justify-content: space-between; align-items: center; }
+    .btn {
+      border: none; border-radius: 8px; padding: 8px 14px;
+      font-size: 0.9rem; cursor: pointer; text-decoration: none;
+      display: inline-block;
+    }
+    .btn--nuevo { background: #4f46e5; color: #fff; }
+    .btn--ok { background: #16a34a; color: #fff; }
+    .btn--ok[disabled] { background: #9ca3af; cursor: default; }
+    .btn--ai { background: #7c3aed; color: #fff; }
+    .btn--del { background: transparent; color: #b91c1c; border: 1px solid #fecaca; }
+    .card {
+      background: #fff; border-radius: 12px; padding: 18px;
+      margin-bottom: 16px; box-shadow: 0 1px 4px rgba(0,0,0,.08);
+    }
+    .card__titulo { margin: 0; font-size: 1.15rem; }
+    .card__desc { margin: 4px 0 12px; color: #6b7280; }
+    .card__racha { font-weight: 600; margin-bottom: 10px; }
+    .dias { display: flex; gap: 6px; margin-bottom: 14px; }
+    .dia {
+      width: 30px; height: 30px; border-radius: 50%;
+      background: #e5e7eb; color: #6b7280;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.75rem;
+    }
+    .dia.cumplido { background: #16a34a; color: #fff; }
+    .acciones { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .acciones form { margin: 0; }
+    .card__mensaje-ia {
+      margin: 12px 0 0; padding: 10px 12px;
+      background: #f3e8ff; border-radius: 8px;
+      min-height: 0;
+    }
+    .card__mensaje-ia:empty { display: none; }
+    .vacio { text-align: center; color: #6b7280; padding: 40px 0; }
+  </style>
+</head>
+<body>
+  <div class="contenedor">
 
-<section class="habitos-grid">
-    {% if habitos|length == 0 %}
-        <div class="empty-state">
-            <p>Aún no tienes hábitos.</p>
-            <p>Crea el primero y comienza tu racha hoy. 🔥</p>
-        </div>
-    {% endif %}
+    <div class="barra">
+      <h1>Mis hábitos</h1>
+      <a class="btn btn--nuevo" href="{{ url_for('nuevo_habito') }}">+ Nuevo hábito</a>
+    </div>
 
-    {% for habito in habitos %}
-    <article class="habito-card" data-habito-id="{{ habito.id }}">
+    <div class="mensaje-dia">{{ mensaje }}</div>
 
-        <div class="habito-header">
-            <h3>{{ habito.nombre }}</h3>
-            <button class="btn-eliminar" data-habito-id="{{ habito.id }}" title="Eliminar hábito">✕</button>
-        </div>
-
+    {% if habitos %}
+      {% for habito in habitos %}
+      <article class="card" id="habito-{{ habito.id }}">
+        <h2 class="card__titulo">{{ habito.nombre }}</h2>
         {% if habito.descripcion %}
-            <p class="habito-descripcion">{{ habito.descripcion }}</p>
+          <p class="card__desc">{{ habito.descripcion }}</p>
         {% endif %}
 
-        <div class="racha-display">
-            <span class="racha-emoji">🔥</span>
-            <span class="racha-numero">{{ habito.racha }}</span>
-            <span class="racha-label">
-                {% if habito.racha == 1 %}día de racha{% else %}días de racha{% endif %}
-            </span>
+        <div class="card__racha">
+          🔥 Racha: <span id="racha-{{ habito.id }}">{{ habito.racha }}</span> días
         </div>
 
-        <div class="dias-semana">
-            {% for dia in habito.ultimos_7_dias %}
-                <span class="dia-indicador {% if dia.cumplido %}dia-cumplido{% else %}dia-pendiente{% endif %}"
-                      title="{{ dia.fecha.strftime('%d/%m') }}">
-                </span>
-            {% endfor %}
+        <div class="dias" id="dias-{{ habito.id }}">
+          {% for dia in habito.ultimos_7_dias %}
+            <div class="dia {{ 'cumplido' if dia.cumplido else '' }}"
+                 title="{{ dia.fecha }}">{{ dia.fecha.day }}</div>
+          {% endfor %}
         </div>
 
-        <button class="btn-completar" data-habito-id="{{ habito.id }}">
-            Marcar como cumplido hoy
-        </button>
+        <div class="acciones">
+          <!-- Completar hoy -->
+          <button class="btn btn--ok" type="button"
+                  onclick="completarHabito({{ habito.id }}, this)"
+                  {% if habito.ultimos_7_dias[-1].cumplido %}disabled{% endif %}>
+            {% if habito.ultimos_7_dias[-1].cumplido %}✔ Hecho hoy{% else %}Marcar hoy{% endif %}
+          </button>
 
-        <div class="feedback-positivo" hidden>¡Bien hecho! 🔥</div>
+          <!-- Botón de IA (HTMX): solo se activa al hacer clic -->
+          <button
+            class="btn btn--ai"
+            hx-post="/habitos/{{ habito.id }}/mensaje"
+            hx-target="#mensaje-{{ habito.id }}"
+            hx-swap="innerHTML"
+          >✨ Generar mensaje</button>
 
-    </article>
-    {% endfor %}
-</section>
+          <!-- Eliminar -->
+          <form action="{{ url_for('eliminar_habito', habito_id=habito.id) }}" method="post"
+                onsubmit="return confirm('¿Eliminar este hábito?');">
+            <button class="btn btn--del" type="submit">Eliminar</button>
+          </form>
+        </div>
 
-<form id="form-eliminar" method="POST" style="display:none;"></form>
+        <p id="mensaje-{{ habito.id }}" class="card__mensaje-ia"></p>
+      </article>
+      {% endfor %}
+    {% else %}
+      <p class="vacio">Aún no tienes hábitos. ¡Crea el primero! 🚀</p>
+    {% endif %}
 
-{% endblock %}
+  </div>
+
+  <script>
+    async function completarHabito(id, boton) {
+      try {
+        const res = await fetch("/completar/" + id, { method: "POST" });
+        const data = await res.json();
+
+        document.getElementById("racha-" + id).textContent = data.racha;
+
+        // Marca el último círculo (hoy) como cumplido
+        const dias = document.querySelectorAll("#dias-" + id + " .dia");
+        if (dias.length) dias[dias.length - 1].classList.add("cumplido");
+
+        boton.disabled = true;
+        boton.textContent = "✔ Hecho hoy";
+      } catch (e) {
+        alert("No se pudo marcar el hábito. Intenta de nuevo.");
+      }
+    }
+  </script>
+</body>
+</html>
